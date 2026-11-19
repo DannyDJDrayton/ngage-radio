@@ -387,7 +387,7 @@ function parseTitle(name){
   let presenter="",show=rest;
   const m=rest.match(/^([^,]+),\s*(.+)$/)                 // "Presenter, Show"
         ||rest.match(/^(.{2,30}?)\s+(The\s.+)$/);         // "Presenter The Show"
-  if(m&&m[1].trim().split(/\s+/).length<=4){presenter=m[1].trim();show=m[2]}
+  if(m&&okName(m[1])){presenter=m[1].trim();show=m[2]}
   else{
     // a presenter we've already seen elsewhere in the archive
     const known=[...knownPresenters].sort((a,b)=>b.length-a.length).find(p=>rest.startsWith(p+" ")&&rest.length>p.length+2);
@@ -400,11 +400,13 @@ function parseTitle(name){
   }
   return {presenter,show:show.trim()||name,date,part};
 }
+// a presenter name: up to 4 words, "&"/"and" between co-hosts doesn't count
+function okName(s){return s.trim().split(/\s+/).filter(w=>!/^(&|and|\+)$/i.test(w)).length<=4}
 function learnPresenters(cloudcasts){
   for(const c of cloudcasts){
     const {rest}=splitTail(c.name||"");
     const m=rest.match(/^([^,]+),\s*(.+)$/)||rest.match(/^(.{2,30}?)\s+(The\s.+)$/);
-    if(m&&m[1].trim().split(/\s+/).length<=4)knownPresenters.add(m[1].trim());
+    if(m&&okName(m[1]))m[1].split(/\s+(?:&|and|\+)\s+/i).forEach(n=>knownPresenters.add(n.trim()));
   }
 }
 let rawCasts=[];
@@ -418,7 +420,7 @@ function toShow(c,i){
     title:t.show+(t.part?" · "+t.part:""),
     presenter:t.presenter,
     date:d?d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"",
-    genre:t.presenter?t.show:(tag||"Specials"),
+    genre:t.presenter?t.show.replace(/\s*\([^)]*\)\s*$/,""):(tag||"Specials"),   // group "(Birthday Special)" etc. with the main programme
     plays:c.play_count||0, length:c.audio_length||0,
     img:p["640wx640h"]||p.extra_large||p.large||p.medium||"",
     thumb:p["320wx320h"]||p.medium||p.large||"",
