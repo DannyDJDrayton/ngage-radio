@@ -55,6 +55,24 @@
   .more{display:block;width:100%;padding:14px;border-radius:14px;background:var(--panel);border:1px solid var(--line);font-weight:600;font-size:14px;margin-top:6px}
   .arch .text{font-size:16px}
   .arch .msg{opacity:.85}
+  .tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+  @media (min-width:600px){.tiles{grid-template-columns:repeat(4,1fr)}}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .tile b{display:block;font-family:'Archivo Black',sans-serif;font-size:28px;line-height:1.1}
+  .tile span{font-size:12px;color:var(--muted)}
+  .tile i{font-style:normal;font-size:11px;color:var(--muted);display:block;margin-top:4px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+  .panel h3{font-size:14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline}
+  .panel h3 small{font-size:11px;color:var(--muted);font-weight:500}
+  .bars{display:flex;align-items:flex-end;gap:3px;height:120px}
+  .bars div{flex:1;background:linear-gradient(180deg,#ff00cc,#ff0040);border-radius:3px 3px 0 0;min-height:2px;position:relative}
+  .bars div.zero{background:var(--line)}
+  .bars div:hover::after{content:attr(data-t);position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);font-size:11px;font-weight:700;padding:3px 6px;border-radius:6px;white-space:nowrap;margin-bottom:4px;z-index:2}
+  .axis{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:6px}
+  .toplist li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;list-style:none}
+  .toplist li:last-child{border-bottom:0}
+  .toplist li span:last-child{color:var(--muted);white-space:nowrap}
+  .note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:4px}
 </style>
 </head>
 <body>
@@ -79,12 +97,14 @@
     <div class="bar">
       <button class="tbtn on" data-f="open">To read<span class="n" id="nOpen">0</span></button>
       <button class="tbtn" data-f="archive">Archive</button>
+      <button class="tbtn" data-f="stats">📊 Stats</button>
       <button class="tbtn" id="soundBtn">🔔 Sound on</button>
       <button class="tbtn" id="logout">Lock</button>
       <span class="count" id="count"></span>
     </div>
     <input class="search hidden" id="q" type="search" placeholder="Search names, messages, shows…" autocomplete="off">
     <div id="list"></div>
+    <div id="stats" class="hidden"><div class="empty">Loading stats…</div></div>
     <button class="more hidden" id="older">Load older messages</button>
   </div>
 </div>
@@ -117,6 +137,9 @@ function card(m,archive){
     </div>`;
 }
 function render(){
+  const st=filter==="stats";
+  $("stats").classList.toggle("hidden",!st);$("list").classList.toggle("hidden",st);
+  if(st){$("q").classList.add("hidden");$("older").classList.add("hidden");$("count").textContent="";return}
   const all=sorted();
   const open=all.filter(m=>!m.done);
   $("nOpen").textContent=open.length;
@@ -176,6 +199,39 @@ async function setDone(k,done){
   catch(_){m.done=prev;alertBar("Couldn't save that — check your connection.")}
   finally{pending.delete(k);render()}
 }
+let statsTimer=null;
+const fmtDay=(d,o)=>new Date(d+"T12:00:00").toLocaleDateString("en-GB",o);
+async function loadStats(){
+  try{
+    const r=await fetch("/api/studio-stats",{headers:{"x-studio-key":key},cache:"no-store"});
+    if(r.status===401){lock("That password didn't work.");return}
+    const s=await r.json();if(!r.ok)throw new Error(s.error||r.status);
+    const max=Math.max(1,...s.days.map(d=>d.visitors)),hmax=Math.max(1,...s.hours);
+    const hourLabel=h=>h===0?"midnight":h===12?"noon":h<12?h+"am":(h-12)+"pm";
+    const busiest=s.hours.indexOf(Math.max(...s.hours));
+    $("stats").innerHTML=`
+      <div class="tiles">
+        <div class="tile"><b>${s.today.visitors}</b><span>Visitors today</span><i>${s.today.plays} plays</i></div>
+        <div class="tile"><b>${s.week.visits}</b><span>Visits · last 7 days</span><i>${s.week.plays} plays</i></div>
+        <div class="tile"><b>${s.month.visits}</b><span>Visits · last 30 days</span><i>${s.month.plays} plays</i></div>
+        <div class="tile"><b>${s.today.home}</b><span>From home screen today</span><i>people who saved the app</i></div>
+      </div>
+      <div class="panel"><h3>Visitors per day <small>last 30 days</small></h3>
+        <div class="bars">${s.days.map(d=>`<div class="${d.visitors?"":"zero"}" style="height:${Math.max(2,d.visitors/max*100)}%" data-t="${fmtDay(d.date,{day:"numeric",month:"short"})}: ${d.visitors}"></div>`).join("")}</div>
+        <div class="axis"><span>${fmtDay(s.days[0].date,{day:"numeric",month:"short"})}</span><span>Today</span></div>
+      </div>
+      <div class="panel"><h3>Busiest times <small>${s.hours.some(Boolean)?"peak around "+hourLabel(busiest):"no visits yet"}</small></h3>
+        <div class="bars" style="height:80px">${s.hours.map((v,h)=>`<div class="${v?"":"zero"}" style="height:${Math.max(2,v/hmax*100)}%" data-t="${hourLabel(h)}: ${v}"></div>`).join("")}</div>
+        <div class="axis"><span>midnight</span><span>6am</span><span>noon</span><span>6pm</span><span>11pm</span></div>
+      </div>
+      <div class="panel"><h3>Top shows played in the app <small>last 30 days</small></h3>
+        ${s.topShows.length?`<ul class="toplist">${s.topShows.map(t=>`<li><span>${esc(t.title)}</span><span>${t.plays} play${t.plays>1?"s":""}</span></li>`).join("")}</ul>`:`<p class="note">No plays yet.</p>`}
+      </div>
+      ${s.liveDays.length?`<div class="panel"><h3>On the app during live shows</h3><ul class="toplist">${s.liveDays.slice().reverse().map(d=>`<li><span>${fmtDay(d.date,{weekday:"short",day:"numeric",month:"short"})}</span><span>${d.listeners} people</span></li>`).join("")}</ul></div>`:""}
+      <p class="note">Counted without cookies. Each visitor is a scrambled code that resets daily, so someone who visits on three different days counts as three visits. Plays here are plays started from the app; Mixcloud's own stats include plays elsewhere.</p>`;
+  }catch(e){$("stats").innerHTML=`<div class="empty">Couldn't load stats right now.</div>`}
+}
+
 function alertBar(t){$("statusText").textContent=t;$("status").classList.add("off");setTimeout(()=>{$("status").classList.remove("off");$("statusText").textContent="Live"},4000)}
 function start(){
   $("login").classList.add("hidden");$("app").classList.remove("hidden");
@@ -199,7 +255,8 @@ $("loginForm").onsubmit=async e=>{
 };
 document.addEventListener("click",e=>{
   const d=e.target.closest("[data-k]");if(d){setDone(d.dataset.k,d.dataset.to==="1");return}
-  const f=e.target.closest("[data-f]");if(f){filter=f.dataset.f;document.querySelectorAll("[data-f]").forEach(b=>b.classList.toggle("on",b===f));render();window.scrollTo(0,0)}
+  const f=e.target.closest("[data-f]");if(f){filter=f.dataset.f;document.querySelectorAll("[data-f]").forEach(b=>b.classList.toggle("on",b===f));render();window.scrollTo(0,0);
+    clearInterval(statsTimer);if(filter==="stats"){loadStats();statsTimer=setInterval(loadStats,60000)}}
 });
 $("q").oninput=render;
 $("older").onclick=loadOlder;
