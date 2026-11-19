@@ -28,7 +28,6 @@
   .msg{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 18px;margin-bottom:12px;position:relative}
   .msg.new{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 10px 30px rgba(255,26,94,.25);animation:pop .4s ease}
   @keyframes pop{from{transform:scale(.97);opacity:0}to{transform:none;opacity:1}}
-  .msg.done{opacity:.45}
   .top{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
   .name{font-weight:700;font-size:17px}
   .time{font-size:12px;color:var(--muted)}
@@ -47,6 +46,15 @@
   .login button{width:100%;margin-top:12px;padding:14px;border-radius:99px;background:linear-gradient(135deg,#ff0040,#ff00cc);color:#fff;font-weight:800;font-size:15px}
   .login .err{color:#ff6b8a;font-size:13px;margin-top:12px;min-height:18px}
   .hidden{display:none!important}
+  .tbtn .n{display:inline-block;min-width:20px;padding:1px 6px;margin-left:6px;border-radius:99px;background:var(--accent);color:#fff;font-size:11px;text-align:center}
+  .tbtn.on .n{background:var(--bg);color:var(--text)}
+  .search{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;color:var(--text);font:inherit;font-size:16px;outline:none;margin-bottom:14px}
+  .search:focus{border-color:var(--accent)}
+  .day{font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin:22px 4px 10px}
+  .day:first-child{margin-top:4px}
+  .more{display:block;width:100%;padding:14px;border-radius:14px;background:var(--panel);border:1px solid var(--line);font-weight:600;font-size:14px;margin-top:6px}
+  .arch .text{font-size:16px}
+  .arch .msg{opacity:.85}
 </style>
 </head>
 <body>
@@ -69,13 +77,15 @@
       <span class="pill" id="status"><span class="d"></span><span id="statusText">Live</span></span>
     </header>
     <div class="bar">
-      <button class="tbtn on" data-f="open">To read</button>
-      <button class="tbtn" data-f="all">All</button>
+      <button class="tbtn on" data-f="open">To read<span class="n" id="nOpen">0</span></button>
+      <button class="tbtn" data-f="archive">Archive</button>
       <button class="tbtn" id="soundBtn">🔔 Sound on</button>
       <button class="tbtn" id="logout">Lock</button>
       <span class="count" id="count"></span>
     </div>
+    <input class="search hidden" id="q" type="search" placeholder="Search names, messages, shows…" autocomplete="off">
     <div id="list"></div>
+    <button class="more hidden" id="older">Load older messages</button>
   </div>
 </div>
 
@@ -84,46 +94,92 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}};
 let key="";try{key=sessionStorage.getItem("studioKey")||""}catch(_){}
-let messages=[],seen=new Set(store.get("studioSeen",[])),done=new Set(store.get("studioDone",[])),filter="open",sound=store.get("studioSound",true),first=true,timer=null,audioCtx=null;
+const byKey=new Map();          // all messages we know about, keyed by storage key
+let seen=new Set(store.get("studioSeen",[])),filter="open",sound=store.get("studioSound",true),first=true,timer=null,audioCtx=null,hasOlder=false,oldestKey="",pending=new Map();
 
-function ago(iso){const s=Math.max(0,(Date.now()-new Date(iso))/1000);if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+" min ago";if(s<86400)return Math.floor(s/3600)+" hr ago";return new Date(iso).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+const api=(opts={})=>fetch("/api/studio-messages"+(opts.qs||""),{method:opts.method||"GET",headers:{"x-studio-key":key,"content-type":"application/json"},body:opts.body,cache:"no-store"});
+function ago(iso){const s=Math.max(0,(Date.now()-new Date(iso))/1000);if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+" min ago";if(s<86400)return Math.floor(s/3600)+" hr ago";return new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}
+function clock(iso){return new Date(iso).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}
+function dayLabel(iso){const d=new Date(iso),t=new Date();const k=x=>x.toDateString();const y=new Date(t);y.setDate(t.getDate()-1);
+  if(k(d)===k(t))return"Today";if(k(d)===k(y))return"Yesterday";return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",year:d.getFullYear()===t.getFullYear()?undefined:"numeric"})}
 function ping(){
   if(!sound)return;
   try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();const t=audioCtx.currentTime;
     [880,1320].forEach((f,i)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=f;o.connect(g);g.connect(audioCtx.destination);g.gain.setValueAtTime(0.0001,t+i*.15);g.gain.exponentialRampToValueAtTime(0.25,t+i*.15+.02);g.gain.exponentialRampToValueAtTime(0.0001,t+i*.15+.3);o.start(t+i*.15);o.stop(t+i*.15+.32)})}catch(_){}
 }
-function render(){
-  const list=messages.filter(m=>filter==="all"||!done.has(m.id));
-  const open=messages.filter(m=>!done.has(m.id)).length;
-  $("count").textContent=`${open} to read · ${messages.length} total`;
-  document.title=(open?`(${open}) `:"")+"Ngage Studio · Messages";
-  $("list").innerHTML=list.length?list.map(m=>`
-    <div class="msg${!seen.has(m.id)&&!first?" new":""}${done.has(m.id)?" done":""}" data-id="${esc(m.id)}">
-      <div class="top"><span class="name">${esc(m.name||"Anonymous")}</span><span class="time">${ago(m.created)}</span>${m.show?`<span class="show">LIVE · ${esc(m.show)}</span>`:""}<span class="actions"><button data-done="${esc(m.id)}">${done.has(m.id)?"Undo":"✓ Done"}</button></span></div>
+const sorted=()=>[...byKey.values()].sort((a,b)=>a.key<b.key?1:-1);
+function card(m,archive){
+  const isNew=!archive&&!seen.has(m.key)&&!first;
+  return `<div class="msg${isNew?" new":""}">
+      <div class="top"><span class="name">${esc(m.name||"Anonymous")}</span><span class="time">${archive?clock(m.created):ago(m.created)}</span>${m.show?`<span class="show">LIVE · ${esc(m.show)}</span>`:""}<span class="actions"><button data-k="${esc(m.key)}" data-to="${archive?"0":"1"}">${archive?"↩ To read":"✓ Done"}</button></span></div>
       <div class="text">${esc(m.message)}</div>
       ${m.contact?`<div class="contact">Reply to: ${esc(m.contact)}</div>`:""}
-    </div>`).join(""):`<div class="empty">${messages.length?"All caught up 🎉":"No messages yet.<br>New ones will pop up here automatically."}</div>`;
+    </div>`;
 }
+function render(){
+  const all=sorted();
+  const open=all.filter(m=>!m.done);
+  $("nOpen").textContent=open.length;
+  document.title=(open.length?`(${open.length}) `:"")+"Ngage Studio · Messages";
+  $("count").textContent=filter==="open"?`${open.length} to read`:`${all.filter(m=>m.done).length} archived`;
+  const arch=filter==="archive";
+  $("q").classList.toggle("hidden",!arch);
+  $("older").classList.toggle("hidden",!(arch&&hasOlder));
+  $("list").classList.toggle("arch",arch);
+  if(!arch){
+    $("list").innerHTML=open.length?open.map(m=>card(m,false)).join(""):`<div class="empty">${all.length?"All caught up 🎉<br>Read messages are in the Archive.":"No messages yet.<br>New ones will pop up here automatically."}</div>`;
+    return;
+  }
+  const q=$("q").value.trim().toLowerCase();
+  const items=all.filter(m=>m.done&&(!q||[m.name,m.message,m.show,m.contact].join(" ").toLowerCase().includes(q)));
+  if(!items.length){$("list").innerHTML=`<div class="empty">${q?"No archived messages match that.":"Nothing in the archive yet.<br>Messages you mark ✓ Done land here."}</div>`;return}
+  let html="",last="";
+  for(const m of items){const d=dayLabel(m.created);if(d!==last){html+=`<div class="day">${esc(d)}</div>`;last=d}html+=card(m,true)}
+  $("list").innerHTML=html;
+}
+function absorb(list){for(const m of list){const p=pending.get(m.key);if(p!==undefined)m.done=p;byKey.set(m.key,m)}}
 async function load(){
   try{
-    const r=await fetch("/api/studio-messages",{headers:{"x-studio-key":key},cache:"no-store"});
+    const r=await api({qs:"?limit=200"});
     if(r.status===401){lock("That password didn't work.");return}
     const j=await r.json();
     if(!r.ok)throw new Error(j.error||r.status);
-    const fresh=j.messages.filter(m=>!seen.has(m.id));
-    messages=j.messages;
+    const fresh=j.messages.filter(m=>!m.done&&!seen.has(m.key));
+    absorb(j.messages);
+    if(first){hasOlder=j.more;oldestKey=j.messages.length?j.messages[j.messages.length-1].key:""}
     if(!first&&fresh.length)ping();
     render();
-    setTimeout(()=>{fresh.forEach(m=>seen.add(m.id));store.set("studioSeen",[...seen].slice(-500))},4000);
+    if(first){j.messages.forEach(m=>seen.add(m.key))}
+    else setTimeout(()=>{fresh.forEach(m=>seen.add(m.key));store.set("studioSeen",[...seen].slice(-1000))},4000);
     first=false;
     $("status").classList.remove("off");$("statusText").textContent="Live";
   }catch(e){
     $("status").classList.add("off");$("statusText").textContent=String(e.message||"").includes("not set up")?"Password not set up on Netlify":"Reconnecting…";
   }
 }
+async function loadOlder(){
+  if(!oldestKey)return;
+  $("older").textContent="Loading…";
+  try{
+    const r=await api({qs:"?limit=200&before="+encodeURIComponent(oldestKey)});
+    const j=await r.json();if(!r.ok)throw new Error();
+    absorb(j.messages);j.messages.forEach(m=>seen.add(m.key));
+    hasOlder=j.more;if(j.messages.length)oldestKey=j.messages[j.messages.length-1].key;
+    render();
+  }catch(_){}
+  $("older").textContent="Load older messages";
+}
+async function setDone(k,done){
+  const m=byKey.get(k);if(!m)return;
+  const prev=m.done;m.done=done;pending.set(k,done);render();
+  try{const r=await api({method:"POST",body:JSON.stringify({key:k,done})});if(!r.ok)throw new Error()}
+  catch(_){m.done=prev;alertBar("Couldn't save that — check your connection.")}
+  finally{pending.delete(k);render()}
+}
+function alertBar(t){$("statusText").textContent=t;$("status").classList.add("off");setTimeout(()=>{$("status").classList.remove("off");$("statusText").textContent="Live"},4000)}
 function start(){
   $("login").classList.add("hidden");$("app").classList.remove("hidden");
-  first=true;load();clearInterval(timer);timer=setInterval(load,5000);
+  first=true;byKey.clear();load();clearInterval(timer);timer=setInterval(load,5000);
 }
 function lock(msg){
   clearInterval(timer);key="";try{sessionStorage.removeItem("studioKey")}catch(_){}
@@ -133,7 +189,7 @@ $("loginForm").onsubmit=async e=>{
   e.preventDefault();$("loginBtn").textContent="Checking…";$("loginErr").textContent="";
   key=$("pw").value;
   try{
-    const r=await fetch("/api/studio-messages",{headers:{"x-studio-key":key},cache:"no-store"});
+    const r=await api({qs:"?limit=1"});
     if(r.status===401){$("loginErr").textContent="That password didn't work.";return}
     if(!r.ok){const j=await r.json().catch(()=>({}));$("loginErr").textContent=j.error||"Couldn't connect. Try again.";return}
     try{sessionStorage.setItem("studioKey",key)}catch(_){}
@@ -142,13 +198,15 @@ $("loginForm").onsubmit=async e=>{
   finally{$("loginBtn").textContent="Open studio"}
 };
 document.addEventListener("click",e=>{
-  const d=e.target.closest("[data-done]");if(d){const id=d.dataset.done;done.has(id)?done.delete(id):done.add(id);store.set("studioDone",[...done].slice(-500));render();return}
-  const f=e.target.closest("[data-f]");if(f){filter=f.dataset.f;document.querySelectorAll("[data-f]").forEach(b=>b.classList.toggle("on",b===f));render()}
+  const d=e.target.closest("[data-k]");if(d){setDone(d.dataset.k,d.dataset.to==="1");return}
+  const f=e.target.closest("[data-f]");if(f){filter=f.dataset.f;document.querySelectorAll("[data-f]").forEach(b=>b.classList.toggle("on",b===f));render();window.scrollTo(0,0)}
 });
+$("q").oninput=render;
+$("older").onclick=loadOlder;
 const syncSound=()=>$("soundBtn").textContent=sound?"🔔 Sound on":"🔕 Sound off";
 $("soundBtn").onclick=()=>{sound=!sound;store.set("studioSound",sound);syncSound();if(sound)ping()};
 $("logout").onclick=()=>lock("");
-setInterval(()=>{if(messages.length)render()},30000);
+setInterval(()=>{if(byKey.size&&filter==="open")render()},30000);
 syncSound();
 if(key)start();
 </script>
