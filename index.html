@@ -314,8 +314,9 @@ let widget=null,paused=true,pos=0,dur=0,seeking=false,hintTimer=null;
 function parseTitle(name){
   // Ngage titles look like: "Ash Watkin, The Country Show 22/2/26 Hr1"
   let presenter="",show=name,date=null,part="";
-  const m=name.match(/^([^,]+),\s*(.+)$/);
-  if(m){presenter=m[1].trim();show=m[2]}
+  const m=name.match(/^([^,]+),\s*(.+)$/)            // "Presenter, Show"
+        ||name.match(/^(.{2,30}?)\s+(The\s.+)$/);       // "Presenter The Show"
+  if(m&&m[1].trim().split(/\s+/).length<=4){presenter=m[1].trim();show=m[2]}
   const hr=show.match(/\s*\bHr\s*(\d+)\s*$/i);
   if(hr){part="Hr "+hr[1];show=show.slice(0,hr.index)}
   const dt=show.match(/\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*$/);
@@ -330,7 +331,7 @@ function toShow(c,i){
   return {
     id:c.key, key:c.key, url:c.url,
     title:t.show+(t.part?" · "+t.part:""),
-    presenter:t.presenter||(c.user&&c.user.name)||"Ngage Radio",
+    presenter:t.presenter,
     date:d?d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"",
     genre:t.presenter?t.show:(tag||"Shows"),
     plays:c.play_count||0, length:c.audio_length||0,
@@ -362,8 +363,8 @@ $("more").onclick=async()=>{if(!nextUrl)return;$("more").textContent="Loading…
 /* ---------- Render ---------- */
 const artAttr=(s,big)=>{const im=big?s.img:s.thumb;return im?`class="art img" style="background:url('${encodeURI(im)}') center/cover"`:`class="art" style="${phBg(s)}"`};
 const phBg=s=>`background:url(mark-white.png) right 10% top 12%/42% no-repeat,linear-gradient(140deg,${s.pal[0]},${s.pal[1]})`;
-const card=s=>`<button class="card" data-id="${esc(s.id)}"><div ${artAttr(s)}><span>${esc(s.title)}</span></div><b>${esc(s.title)}</b><i>${esc(s.presenter)}</i></button>`;
-const row=s=>`<button class="row${current&&current.id===s.id?" playing":""}" data-id="${esc(s.id)}"><div ${artAttr(s)}></div><div class="meta"><b>${esc(s.title)}</b><i>${esc(s.presenter)} · ${esc(s.date)}</i></div><span class="dur">${s.length?fmt(s.length):""}</span></button>`;
+const card=s=>`<button class="card" data-id="${esc(s.id)}"><div ${artAttr(s)}><span>${esc(s.title)}</span></div><b>${esc(s.title)}</b><i>${esc(s.presenter||s.date)}</i></button>`;
+const row=s=>`<button class="row${current&&current.id===s.id?" playing":""}" data-id="${esc(s.id)}"><div ${artAttr(s)}></div><div class="meta"><b>${esc(s.title)}</b><i>${esc([s.presenter,s.date].filter(Boolean).join(" · "))}</i></div><span class="dur">${s.length?fmt(s.length):""}</span></button>`;
 function render(){
   if(!shows.length)return;
   const feat=shows.find(s=>s.key===FEATURED_KEY)||shows[0];
@@ -379,7 +380,7 @@ function render(){
   const list=shows.filter(s=>(filter==="All"||s.genre===filter)&&(!q||(s.title+" "+s.presenter+" "+s.genre).toLowerCase().includes(q)));
   $("list").innerHTML=list.length?list.map(row).join(""):`<p style="color:var(--muted);padding:20px 4px">No shows match that.</p>`;
   $("statShows").textContent=shows.length+(nextUrl?"+":"");
-  $("statPres").textContent=new Set(shows.map(s=>s.presenter)).size;
+  $("statPres").textContent=new Set(shows.map(s=>s.presenter).filter(Boolean)).size;
 }
 
 /* ---------- Mixcloud player ---------- */
@@ -415,7 +416,7 @@ function showNowPlaying(s){
   $("fullArtText").textContent=s.title;
   $("full").style.setProperty("--c1",s.pal[1]);
   $("miniTitle").textContent=$("fullTitle").textContent=s.title;
-  $("miniSub").textContent=s.presenter;
+  $("miniSub").textContent=s.presenter||s.date;
   $("fullSub").textContent=[s.presenter,s.date].filter(Boolean).join(" · ");
   $("mcLink").href=s.url||"https://www.mixcloud.com/";
   $("tDur").textContent=fmt(dur);updateProgress();
