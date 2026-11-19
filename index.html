@@ -245,6 +245,7 @@
         <input id="q" placeholder="Search shows, presenters…" autocomplete="off">
       </div>
       <div class="chips" id="chips"></div>
+      <div id="listInfo" style="font-size:12px;color:var(--muted);margin:0 4px 8px"></div>
       <div id="list"></div>
       <button class="more" id="more" hidden>Load more shows</button>
     </section>
@@ -345,7 +346,8 @@
 /* ================= SETTINGS ================= */
 const MIXCLOUD_USER = "NgageRadio";   // ← your Mixcloud username (from mixcloud.com/USERNAME/)
 const FEATURED_KEY  = "";             // optional: a show's key e.g. "/NgageRadio/breakfast-takeover/" — blank = newest show
-const PAGE_SIZE     = 30;
+const PAGE_SIZE     = 100;            // shows fetched per request (whole archive loads in the background)
+const LIST_STEP     = 60;             // shows drawn at a time in the Shows list
 
 /* ---- LIVE SHOWS ----
    The "LIVE NOW" banner switches on by itself while a show below is on air
@@ -367,22 +369,45 @@ const ICON_PAUSE='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v1
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmt=t=>{if(!isFinite(t)||t<0)return"0:00";t=Math.floor(t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=String(t%60).padStart(2,"0");return h?`${h}:${String(m).padStart(2,"0")}:${s}`:`${m}:${s}`};
 
-let shows=[],nextUrl=null,current=null,filter="All";
+let shows=[],current=null,filter="All",listLimit=LIST_STEP,loadingAll=false,knownPresenters=new Set();
 let widget=null,paused=true,pos=0,dur=0,seeking=false,hintTimer=null;
 
 /* ---------- Load shows from Mixcloud ---------- */
+function splitTail(t){
+  // strip "Hr1" / "Hr 1 & 2" and a trailing date like 22/2/26
+  let part="",date=null;
+  const hr=t.match(/\s*\bHr\s*(\d+(?:\s*(?:&|and|\+)\s*\d+)?)\s*$/i);
+  if(hr){part="Hr "+hr[1].replace(/\s*(?:&|and|\+)\s*/i," & ");t=t.slice(0,hr.index)}
+  const dt=t.match(/\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*$/);
+  if(dt){let y=+dt[3];if(y<100)y+=2000;date=new Date(y,+dt[2]-1,+dt[1]);t=t.slice(0,dt.index)}
+  return {rest:t.trim(),part,date};
+}
 function parseTitle(name){
-  // Ngage titles look like: "Ash Watkin, The Country Show 22/2/26 Hr1"
-  let presenter="",show=name,date=null,part="";
-  const m=name.match(/^([^,]+),\s*(.+)$/)            // "Presenter, Show"
-        ||name.match(/^(.{2,30}?)\s+(The\s.+)$/);       // "Presenter The Show"
+  const {rest,part,date}=splitTail(name);
+  let presenter="",show=rest;
+  const m=rest.match(/^([^,]+),\s*(.+)$/)                 // "Presenter, Show"
+        ||rest.match(/^(.{2,30}?)\s+(The\s.+)$/);         // "Presenter The Show"
   if(m&&m[1].trim().split(/\s+/).length<=4){presenter=m[1].trim();show=m[2]}
-  const hr=show.match(/\s*\bHr\s*(\d+)\s*$/i);
-  if(hr){part="Hr "+hr[1];show=show.slice(0,hr.index)}
-  const dt=show.match(/\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*$/);
-  if(dt){let y=+dt[3];if(y<100)y+=2000;date=new Date(y,+dt[2]-1,+dt[1]);show=show.slice(0,dt.index)}
+  else{
+    // a presenter we've already seen elsewhere in the archive
+    const known=[...knownPresenters].sort((a,b)=>b.length-a.length).find(p=>rest.startsWith(p+" ")&&rest.length>p.length+2);
+    if(known){presenter=known;show=rest.slice(known.length+1)}
+    else if(date){
+      // dated show titles usually start with a two-word name: "Stu Jackson Ngage Anthems"
+      const w=rest.split(/\s+/);
+      if(w.length>=3&&/^[A-Z0-9]/.test(w[0])&&/^[A-Z0-9]/.test(w[1])){presenter=w[0]+" "+w[1];show=w.slice(2).join(" ")}
+    }
+  }
   return {presenter,show:show.trim()||name,date,part};
 }
+function learnPresenters(cloudcasts){
+  for(const c of cloudcasts){
+    const {rest}=splitTail(c.name||"");
+    const m=rest.match(/^([^,]+),\s*(.+)$/)||rest.match(/^(.{2,30}?)\s+(The\s.+)$/);
+    if(m&&m[1].trim().split(/\s+/).length<=4)knownPresenters.add(m[1].trim());
+  }
+}
+let rawCasts=[];
 function toShow(c,i){
   const p=c.pictures||{};
   const t=parseTitle(c.name||"Untitled show");
@@ -393,32 +418,48 @@ function toShow(c,i){
     title:t.show+(t.part?" · "+t.part:""),
     presenter:t.presenter,
     date:d?d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"",
-    genre:t.presenter?t.show:(tag||"Shows"),
+    genre:t.presenter?t.show:(tag||"Specials"),
     plays:c.play_count||0, length:c.audio_length||0,
     img:p["640wx640h"]||p.extra_large||p.large||p.medium||"",
     thumb:p["320wx320h"]||p.medium||p.large||"",
-    pal:PALETTES[(shows.length+i)%PALETTES.length]
+    pal:PALETTES[i%PALETTES.length]
   };
 }
-async function loadPage(url){
+function rebuild(){
+  const cur=current&&current.id;
+  shows=rawCasts.map(toShow);
+  if(cur)current=shows.find(s=>s.id===cur)||current;
+}
+async function fetchPage(url){
   const r=await fetch(url);
   if(!r.ok)throw new Error("HTTP "+r.status);
-  const j=await r.json();
-  shows=shows.concat((j.data||[]).map(toShow));
-  nextUrl=j.paging&&j.paging.next||null;
-  $("more").hidden=!nextUrl;
-  render();
+  return r.json();
 }
+let renderTimer=null;
+function renderSoon(){clearTimeout(renderTimer);renderTimer=setTimeout(render,250)}
 async function init(){
   try{
-    await loadPage(`https://api.mixcloud.com/${encodeURIComponent(MIXCLOUD_USER)}/cloudcasts/?limit=${PAGE_SIZE}&offset=0`);
-    if(!shows.length)throw new Error("No shows");
+    let j=await fetchPage(`https://api.mixcloud.com/${encodeURIComponent(MIXCLOUD_USER)}/cloudcasts/?limit=${PAGE_SIZE}&offset=0`);
+    rawCasts=j.data||[];
+    if(!rawCasts.length)throw new Error("No shows");
+    learnPresenters(rawCasts);rebuild();render();
+    // keep loading the rest of the archive quietly
+    loadingAll=true;render();
+    let next=j.paging&&j.paging.next,guard=0;
+    while(next&&guard++<60){
+      try{j=await fetchPage(next)}catch(_){await new Promise(r=>setTimeout(r,1500));try{j=await fetchPage(next)}catch(__){break}}
+      const batch=j.data||[];if(!batch.length)break;
+      rawCasts=rawCasts.concat(batch);learnPresenters(batch);rebuild();renderSoon();
+      next=j.paging&&j.paging.next;
+    }
   }catch(e){
-    $("notice").innerHTML=`<div class="notice"><b>No shows loaded yet.</b><br>Check the Mixcloud username in the settings at the bottom of this file (currently “${esc(MIXCLOUD_USER)}”) and that the account has public uploads.</div>`;
-    $("heroTitle").textContent="Coming soon";$("shelfRecent").innerHTML="";
-  }
+    if(!rawCasts.length){
+      $("notice").innerHTML=`<div class="notice"><b>No shows loaded yet.</b><br>Check the Mixcloud username in the settings near the bottom of this file (currently “${esc(MIXCLOUD_USER)}”) and that the account has public uploads.</div>`;
+      $("heroTitle").textContent="Coming soon";$("shelfRecent").innerHTML="";
+    }
+  }finally{loadingAll=false;rebuild();render()}
 }
-$("more").onclick=async()=>{if(!nextUrl)return;$("more").textContent="Loading…";try{await loadPage(nextUrl)}finally{$("more").textContent="Load more shows"}};
+$("more").onclick=()=>{listLimit+=LIST_STEP;render()};
 
 /* ---------- Render ---------- */
 const artAttr=(s,big)=>{const im=big?s.img:s.thumb;return im?`class="art img" style="background:url('${encodeURI(im)}') center/cover"`:`class="art" style="${phBg(s)}"`};
@@ -434,12 +475,17 @@ function render(){
   $("heroPlay").onclick=()=>play(feat);
   $("shelfRecent").innerHTML=shows.slice(0,8).map(card).join("");
   $("shelfFav").innerHTML=[...shows].sort((a,b)=>b.plays-a.plays).slice(0,8).map(card).join("");
-  const genres=["All",...new Set(shows.map(s=>s.genre))];
-  $("chips").innerHTML=genres.length>2?genres.map(g=>`<button class="chip${g===filter?" on":""}" data-g="${esc(g)}">${esc(g)}</button>`).join(""):"";
+  const counts=new Map();shows.forEach(s=>counts.set(s.genre,(counts.get(s.genre)||0)+1));
+  const progs=[...counts.entries()].filter(([g,n])=>n>=2||g===filter).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,24).map(([g])=>g);
+  if(filter!=="All"&&!progs.includes(filter))progs.unshift(filter);
+  $("chips").innerHTML=progs.length>1?["All",...progs].map(g=>`<button class="chip${g===filter?" on":""}" data-g="${esc(g)}">${esc(g)}${g!=="All"?` <span style="opacity:.6">${counts.get(g)||0}</span>`:""}</button>`).join(""):"";
   const q=$("q").value.trim().toLowerCase();
-  const list=shows.filter(s=>(filter==="All"||s.genre===filter)&&(!q||(s.title+" "+s.presenter+" "+s.genre).toLowerCase().includes(q)));
-  $("list").innerHTML=list.length?list.map(row).join(""):`<p style="color:var(--muted);padding:20px 4px">No shows match that.</p>`;
-  $("statShows").textContent=shows.length+(nextUrl?"+":"");
+  const list=shows.filter(s=>(filter==="All"||s.genre===filter)&&(!q||(s.title+" "+s.presenter+" "+s.genre+" "+s.date).toLowerCase().includes(q)));
+  $("list").innerHTML=list.length?list.slice(0,listLimit).map(row).join(""):`<p style="color:var(--muted);padding:20px 4px">${loadingAll?"Still loading the archive…":"No shows match that."}</p>`;
+  $("more").hidden=list.length<=listLimit;
+  $("more").textContent=`Show more (${list.length-Math.min(listLimit,list.length)} more)`;
+  $("listInfo").textContent=list.length?`${list.length.toLocaleString("en-GB")} show${list.length>1?"s":""}${loadingAll?" · loading more…":""}`:"";
+  $("statShows").textContent=shows.length.toLocaleString("en-GB")+(loadingAll?"+":"");
   $("statPres").textContent=new Set(shows.map(s=>s.presenter).filter(Boolean)).size;
 }
 
@@ -560,14 +606,14 @@ try{const n=localStorage.getItem("ngageName");if(n)$("msgName").value=n}catch(_)
 document.addEventListener("click",e=>{
   const c=e.target.closest("[data-id]");if(c){const s=shows.find(x=>x.id===c.dataset.id);if(s)play(s);return}
   const g=e.target.closest("[data-go]");if(g){go(g.dataset.go);return}
-  const ch=e.target.closest("[data-g]");if(ch){filter=ch.dataset.g;render()}
+  const ch=e.target.closest("[data-g]");if(ch){filter=ch.dataset.g;listLimit=LIST_STEP;render()}
 });
 function go(v){
   document.querySelectorAll(".view").forEach(x=>x.classList.toggle("active",x.id==="v-"+v));
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.dataset.go===v));
   $("full").classList.remove("open");$("screen").scrollTop=0;
 }
-$("q").oninput=render;
+$("q").oninput=()=>{listLimit=LIST_STEP;render()};
 $("mini").onclick=e=>{if(e.target.closest("#miniPP"))return;$("full").classList.add("open")};
 $("miniPP").onclick=toggle;$("play").onclick=toggle;
 $("closeFull").onclick=()=>$("full").classList.remove("open");
