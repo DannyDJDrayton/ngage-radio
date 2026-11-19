@@ -496,6 +496,7 @@ function widgetSrc(key){
   return "https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&mini=1&light=0&hide_artwork=1&autoplay=1&feed="+encodeURIComponent(key);
 }
 function play(s){
+  if(location.hostname!=="localhost")track("play",{show:s.title});
   current=s;pos=0;dur=s.length||0;showNowPlaying(s);render();
   $("mcdock").classList.add("show");$("mini").classList.add("show");
   if(!widget){
@@ -561,6 +562,7 @@ function renderLive(){
     $("liveSub").textContent=onAir?`${onAir.presenter} · until ${onAir.en.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/London"})}`:"On Mixcloud Live";
   }else banner.classList.remove("show");
   liveShowName=onAir?onAir.title:(LIVE_NOW?LIVE_TITLE:"");
+  if(liveShowName&&trackedLive!==liveShowName&&typeof track==="function"&&location.hostname!=="localhost"){trackedLive=liveShowName;track("live",{show:liveShowName})}
   $("msgCardTitle").textContent=liveShowName?"Message the studio · we're live!":"Message the studio";
   document.querySelector('.tab[data-go="home"]').classList.toggle("haslive",!!(onAir||LIVE_NOW));
   const next=sched.filter(s=>s.en>now&&s!==onAir);
@@ -603,6 +605,18 @@ $("msgForm").addEventListener("submit",async e=>{
 });
 $("msgAgain").onclick=()=>{$("msgDone").hidden=true;$("msgFormWrap").hidden=false};
 try{const n=localStorage.getItem("ngageName");if(n)$("msgName").value=n}catch(_){}
+
+/* ---------- Anonymous visit counter (no cookies) ---------- */
+function track(e,extra={}){
+  try{
+    const body=JSON.stringify({e,...extra});
+    if(navigator.sendBeacon&&navigator.sendBeacon("/api/track",body))return;
+    fetch("/api/track",{method:"POST",body,keepalive:true}).catch(()=>{});
+  }catch(_){}
+}
+const isHome=(window.matchMedia&&matchMedia("(display-mode: standalone)").matches)||navigator.standalone===true;
+if(location.hostname!=="localhost")track("view",{home:isHome});
+let trackedLive="";
 
 /* ---------- UI wiring ---------- */
 document.addEventListener("click",e=>{
