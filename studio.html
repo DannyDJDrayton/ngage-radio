@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0d0b14">
+<title>Ngage Studio · Messages</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0d0b14;--panel:#17141f;--panel2:#211d2c;--line:#2c2738;--text:#f4f1fa;--muted:#9a93ab;--accent:#ff1a5e}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  .wrap{max-width:760px;margin:0 auto;padding:max(18px,env(safe-area-inset-top)) 18px 40px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+  header img{height:44px}
+  header h1{font-family:'Archivo Black',sans-serif;font-size:20px;flex:1;line-height:1.1}
+  @media (max-width:480px){header img{height:36px}header h1{font-size:17px}}
+  .pill{font-size:12px;font-weight:700;padding:7px 12px;border-radius:99px;background:var(--panel2);color:var(--muted);display:flex;align-items:center;gap:7px;white-space:nowrap}
+  .pill .d{width:8px;height:8px;border-radius:50%;background:#3ddc84}
+  .pill.off .d{background:#ff6b8a}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .tbtn{font-size:13px;font-weight:600;padding:9px 14px;border-radius:99px;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+  .tbtn.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+  .count{margin-left:auto;font-size:13px;color:var(--muted);align-self:center}
+  .msg{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px 18px;margin-bottom:12px;position:relative}
+  .msg.new{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 10px 30px rgba(255,26,94,.25);animation:pop .4s ease}
+  @keyframes pop{from{transform:scale(.97);opacity:0}to{transform:none;opacity:1}}
+  .msg.done{opacity:.45}
+  .top{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .name{font-weight:700;font-size:17px}
+  .time{font-size:12px;color:var(--muted)}
+  .show{font-size:11px;font-weight:700;letter-spacing:.5px;padding:3px 8px;border-radius:99px;background:linear-gradient(135deg,#ff0040,#ff00cc);color:#fff}
+  .text{font-size:19px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}
+  .contact{font-size:13px;color:var(--muted);margin-top:10px}
+  .actions{margin-left:auto}
+  .actions button{font-size:12px;font-weight:700;padding:7px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+  .empty{text-align:center;color:var(--muted);padding:60px 20px;line-height:1.6}
+  .login{max-width:360px;margin:12vh auto 0;text-align:center}
+  .login img{height:64px;margin-bottom:18px}
+  .login h2{font-family:'Archivo Black',sans-serif;font-size:24px;margin-bottom:6px}
+  .login p{color:var(--muted);font-size:14px;margin-bottom:20px}
+  .login input{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;color:var(--text);font:inherit;font-size:16px;outline:none;text-align:center}
+  .login input:focus{border-color:var(--accent)}
+  .login button{width:100%;margin-top:12px;padding:14px;border-radius:99px;background:linear-gradient(135deg,#ff0040,#ff00cc);color:#fff;font-weight:800;font-size:15px}
+  .login .err{color:#ff6b8a;font-size:13px;margin-top:12px;min-height:18px}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="login" id="login">
+    <img src="logo.png" alt="Ngage Radio">
+    <h2>Studio messages</h2>
+    <p>For presenters only. Enter the studio password.</p>
+    <form id="loginForm">
+      <input type="password" id="pw" placeholder="Studio password" autocomplete="current-password" required>
+      <button type="submit" id="loginBtn">Open studio</button>
+      <div class="err" id="loginErr"></div>
+    </form>
+  </div>
+
+  <div class="hidden" id="app">
+    <header>
+      <img src="logo.png" alt="Ngage Radio">
+      <h1>Studio messages</h1>
+      <span class="pill" id="status"><span class="d"></span><span id="statusText">Live</span></span>
+    </header>
+    <div class="bar">
+      <button class="tbtn on" data-f="open">To read</button>
+      <button class="tbtn" data-f="all">All</button>
+      <button class="tbtn" id="soundBtn">🔔 Sound on</button>
+      <button class="tbtn" id="logout">Lock</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(_){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}}};
+let key="";try{key=sessionStorage.getItem("studioKey")||""}catch(_){}
+let messages=[],seen=new Set(store.get("studioSeen",[])),done=new Set(store.get("studioDone",[])),filter="open",sound=store.get("studioSound",true),first=true,timer=null,audioCtx=null;
+
+function ago(iso){const s=Math.max(0,(Date.now()-new Date(iso))/1000);if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+" min ago";if(s<86400)return Math.floor(s/3600)+" hr ago";return new Date(iso).toLocaleString("en-GB",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+function ping(){
+  if(!sound)return;
+  try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();const t=audioCtx.currentTime;
+    [880,1320].forEach((f,i)=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.frequency.value=f;o.connect(g);g.connect(audioCtx.destination);g.gain.setValueAtTime(0.0001,t+i*.15);g.gain.exponentialRampToValueAtTime(0.25,t+i*.15+.02);g.gain.exponentialRampToValueAtTime(0.0001,t+i*.15+.3);o.start(t+i*.15);o.stop(t+i*.15+.32)})}catch(_){}
+}
+function render(){
+  const list=messages.filter(m=>filter==="all"||!done.has(m.id));
+  const open=messages.filter(m=>!done.has(m.id)).length;
+  $("count").textContent=`${open} to read · ${messages.length} total`;
+  document.title=(open?`(${open}) `:"")+"Ngage Studio · Messages";
+  $("list").innerHTML=list.length?list.map(m=>`
+    <div class="msg${!seen.has(m.id)&&!first?" new":""}${done.has(m.id)?" done":""}" data-id="${esc(m.id)}">
+      <div class="top"><span class="name">${esc(m.name||"Anonymous")}</span><span class="time">${ago(m.created)}</span>${m.show?`<span class="show">LIVE · ${esc(m.show)}</span>`:""}<span class="actions"><button data-done="${esc(m.id)}">${done.has(m.id)?"Undo":"✓ Done"}</button></span></div>
+      <div class="text">${esc(m.message)}</div>
+      ${m.contact?`<div class="contact">Reply to: ${esc(m.contact)}</div>`:""}
+    </div>`).join(""):`<div class="empty">${messages.length?"All caught up 🎉":"No messages yet.<br>New ones will pop up here automatically."}</div>`;
+}
+async function load(){
+  try{
+    const r=await fetch("/api/studio-messages",{headers:{"x-studio-key":key},cache:"no-store"});
+    if(r.status===401){lock("That password didn't work.");return}
+    const j=await r.json();
+    if(!r.ok)throw new Error(j.error||r.status);
+    const fresh=j.messages.filter(m=>!seen.has(m.id));
+    messages=j.messages;
+    if(!first&&fresh.length)ping();
+    render();
+    setTimeout(()=>{fresh.forEach(m=>seen.add(m.id));store.set("studioSeen",[...seen].slice(-500))},4000);
+    first=false;
+    $("status").classList.remove("off");$("statusText").textContent="Live";
+  }catch(e){
+    $("status").classList.add("off");$("statusText").textContent=String(e.message||"").includes("not set up")?"Password not set up on Netlify":"Reconnecting…";
+  }
+}
+function start(){
+  $("login").classList.add("hidden");$("app").classList.remove("hidden");
+  first=true;load();clearInterval(timer);timer=setInterval(load,5000);
+}
+function lock(msg){
+  clearInterval(timer);key="";try{sessionStorage.removeItem("studioKey")}catch(_){}
+  $("app").classList.add("hidden");$("login").classList.remove("hidden");$("loginErr").textContent=msg||"";
+}
+$("loginForm").onsubmit=async e=>{
+  e.preventDefault();$("loginBtn").textContent="Checking…";$("loginErr").textContent="";
+  key=$("pw").value;
+  try{
+    const r=await fetch("/api/studio-messages",{headers:{"x-studio-key":key},cache:"no-store"});
+    if(r.status===401){$("loginErr").textContent="That password didn't work.";return}
+    if(!r.ok){const j=await r.json().catch(()=>({}));$("loginErr").textContent=j.error||"Couldn't connect. Try again.";return}
+    try{sessionStorage.setItem("studioKey",key)}catch(_){}
+    $("pw").value="";start();
+  }catch(_){$("loginErr").textContent="Couldn't connect. Try again."}
+  finally{$("loginBtn").textContent="Open studio"}
+};
+document.addEventListener("click",e=>{
+  const d=e.target.closest("[data-done]");if(d){const id=d.dataset.done;done.has(id)?done.delete(id):done.add(id);store.set("studioDone",[...done].slice(-500));render();return}
+  const f=e.target.closest("[data-f]");if(f){filter=f.dataset.f;document.querySelectorAll("[data-f]").forEach(b=>b.classList.toggle("on",b===f));render()}
+});
+const syncSound=()=>$("soundBtn").textContent=sound?"🔔 Sound on":"🔕 Sound off";
+$("soundBtn").onclick=()=>{sound=!sound;store.set("studioSound",sound);syncSound();if(sound)ping()};
+$("logout").onclick=()=>lock("");
+setInterval(()=>{if(messages.length)render()},30000);
+syncSound();
+if(key)start();
+</script>
+</body>
+</html>
