@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0b14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ngage Radio">
+<title>Ngage Radio</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d0b14; --panel:#17141f; --panel2:#211d2c; --line:#2c2738;
+    --text:#f4f1fa; --muted:#9a93ab; --accent:#ff1a5e; --accent2:#ff2bd6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:Inter,system-ui,sans-serif;background:#05040a;color:var(--text);display:flex;align-items:center;justify-content:center}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+
+  /* Phone frame on desktop, full screen on phones */
+  .phone{width:390px;height:844px;max-height:calc(100vh - 40px);background:var(--bg);border-radius:48px;border:10px solid #1c1a22;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 2px #333;position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:110px;height:30px;background:#000;border-radius:20px;z-index:50}
+  @media (max-width:500px){
+    body{display:block;background:var(--bg)}
+    .phone{width:100%;height:100%;max-height:none;border:0;border-radius:0;box-shadow:none}
+    .notch{display:none}
+  }
+
+  .status{height:50px;padding:16px 28px 0;display:flex;justify-content:space-between;font-size:14px;font-weight:600;flex-shrink:0;padding-top:max(16px,env(safe-area-inset-top))}
+  @media (max-width:500px){.status{display:none}}
+
+  .screen{flex:1;overflow-y:auto;padding:8px 20px 170px;scrollbar-width:none}
+  .screen::-webkit-scrollbar{display:none}
+  @media (max-width:500px){.screen{padding-top:max(18px,env(safe-area-inset-top))}}
+  .view{display:none}.view.active{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .top{display:flex;align-items:center;justify-content:space-between;margin:6px 0 20px}
+  .logo{font-family:'Archivo Black',sans-serif;font-size:28px;letter-spacing:-.5px;line-height:1}
+  .logo span{color:var(--accent)}
+  .tag{font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:4px}
+  .badge{font-size:11px;font-weight:700;padding:6px 10px;border-radius:99px;background:var(--panel2);color:#ff5fa0;letter-spacing:1px}
+
+  .hero{border-radius:24px;padding:22px;background:linear-gradient(135deg,#ff0000 0%,#ff0066 45%,#ff00cc 100%);position:relative;overflow:hidden;margin-bottom:26px}
+  .hero::after{content:"";position:absolute;right:-30px;bottom:-34px;width:170px;height:170px;background:url(mark-white.png) center/contain no-repeat;pointer-events:none}
+  .hero>*{position:relative;z-index:1}
+  .brandlogo{height:58px;width:auto;display:block}
+  .hero small{font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.85;font-weight:600}
+  .hero h2{font-family:'Archivo Black',sans-serif;font-size:24px;margin:8px 0 4px;line-height:1.15}
+  .hero p{font-size:13px;opacity:.85;margin-bottom:16px}
+  .btn{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#1a1024;font-weight:700;font-size:14px;padding:11px 18px;border-radius:99px}
+  .btn svg{width:16px;height:16px}
+
+  h3{font-size:18px;font-weight:700;margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline}
+  h3 a{font-size:13px;color:var(--accent);font-weight:600;cursor:pointer}
+
+  .chips{display:flex;gap:8px;overflow-x:auto;margin:0 -20px 20px;padding:0 20px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex-shrink:0;padding:8px 14px;border-radius:99px;background:var(--panel);border:1px solid var(--line);font-size:13px;font-weight:600;color:var(--muted)}
+  .chip.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+
+  .shelf{display:flex;gap:14px;overflow-x:auto;margin:0 -20px 26px;padding:0 20px;scrollbar-width:none}
+  .shelf::-webkit-scrollbar{display:none}
+  .card{flex-shrink:0;width:140px;text-align:left}
+  .art{aspect-ratio:1;border-radius:18px;display:flex;align-items:flex-end;padding:12px;font-family:'Archivo Black',sans-serif;font-size:15px;line-height:1.1;position:relative;overflow:hidden;margin-bottom:8px}
+  .art::before{content:none}
+  .art span{position:relative}
+  .card b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card i{font-style:normal;font-size:12px;color:var(--muted)}
+
+  .row{display:flex;align-items:center;gap:12px;width:100%;padding:10px;border-radius:16px;text-align:left;margin-bottom:4px}
+  .row:active,.row.playing{background:var(--panel)}
+  .row .art{width:56px;height:56px;border-radius:12px;margin:0;font-size:0;flex-shrink:0;padding:0}
+  .row .meta{flex:1;min-width:0}
+  .row b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row.playing b{color:var(--accent)}
+  .row i{font-style:normal;font-size:12px;color:var(--muted)}
+  .row .dur{font-size:12px;color:var(--muted)}
+
+  .search{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:16px}
+  .search input{flex:1;background:none;border:0;color:var(--text);font:inherit;font-size:15px;outline:none}
+  .search svg{width:18px;height:18px;color:var(--muted)}
+
+
+  .about p{color:var(--muted);font-size:15px;line-height:1.6;margin-bottom:14px}
+  .stat{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0}
+  .stat div{background:var(--panel);border-radius:16px;padding:16px}
+  .stat b{font-family:'Archivo Black',sans-serif;font-size:24px;display:block;color:var(--accent)}
+  .stat span{font-size:12px;color:var(--muted)}
+
+  /* Mini player */
+  .mini{position:absolute;left:12px;right:12px;bottom:92px;background:var(--panel2);border-radius:18px;padding:8px 10px 8px 8px;display:none;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:20;cursor:pointer;overflow:hidden}
+  .mini.show{display:flex}
+  .mini .art{width:44px;height:44px;border-radius:10px;margin:0;padding:0;font-size:0;flex-shrink:0}
+  .mini .meta{flex:1;min-width:0}
+  .mini b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mini i{font-style:normal;font-size:12px;color:var(--muted)}
+  .mini .pp{width:40px;height:40px;display:grid;place-items:center}
+  .mini .pp svg{width:24px;height:24px}
+  .mini .bar{position:absolute;left:0;bottom:0;height:2px;background:var(--accent);width:0}
+
+  /* Tab bar */
+  .tabs{position:absolute;left:0;right:0;bottom:0;height:84px;background:rgba(13,11,20,.92);backdrop-filter:blur(16px);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:10px 10px max(22px,env(safe-area-inset-bottom));z-index:15}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--muted);flex:1}
+  .tab svg{width:24px;height:24px}
+  .tab.on{color:var(--text)}
+  .tab.on svg{color:var(--accent)}
+
+  /* Full player */
+  .full{position:absolute;inset:0;background:linear-gradient(180deg,var(--c1,#7a2bd6) -20%,var(--bg) 70%);z-index:40;transform:translateY(100%);transition:transform .35s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding:56px 26px 40px}
+  .full.open{transform:none}
+  @media (max-width:500px){.full{padding-top:max(24px,env(safe-area-inset-top));padding-bottom:max(30px,env(safe-area-inset-bottom))}}
+  .full .head{display:flex;justify-content:space-between;align-items:center;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .full .head button svg{width:28px;height:28px}
+  .full .big{flex:1;display:flex;align-items:center;justify-content:center;padding:20px 0}
+  .full .big .art{width:100%;max-width:320px;border-radius:26px;font-size:30px;padding:22px;box-shadow:0 30px 60px rgba(0,0,0,.5);margin:0}
+  .full h2{font-size:22px;font-weight:700;margin-bottom:4px}
+  .full .sub{color:var(--muted);font-size:14px;margin-bottom:22px}
+  .seek{width:100%;-webkit-appearance:none;appearance:none;height:4px;border-radius:4px;background:linear-gradient(to right,var(--text) var(--p,0%),var(--line) var(--p,0%));outline:none}
+  .seek::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--text)}
+  .seek::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--text)}
+  .times{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin:8px 0 18px;font-variant-numeric:tabular-nums}
+  .ctrls{display:flex;align-items:center;justify-content:space-between}
+  .ctrls button svg{width:30px;height:30px}
+  .ctrls .skip{font-size:11px;font-weight:700;position:relative}
+  .ctrls .play{width:76px;height:76px;border-radius:50%;background:var(--text);color:var(--bg);display:grid;place-items:center}
+  .ctrls .play svg{width:34px;height:34px}
+  /* --- Mixcloud additions --- */
+  .screen{padding-bottom:230px}
+  .mini{bottom:150px}
+  .mcdock{position:absolute;left:0;right:0;bottom:84px;height:60px;z-index:45;background:#000;display:none;border-top:1px solid var(--line)}
+  .mcdock.show{display:block}
+  .mcdock iframe{width:100%;height:60px;border:0;display:block}
+  .full{bottom:144px;padding-bottom:16px;transform:translateY(calc(100% + 160px))}
+  .full.open{transform:none}
+  .full .big .art.img{background-size:cover!important;background-position:center!important}
+  .art.img span{display:none}
+  .art.img::before{display:none}
+  .hint{position:absolute;left:16px;right:16px;bottom:154px;z-index:46;background:#fff;color:#1a1024;font-size:13px;font-weight:600;padding:10px 14px;border-radius:12px;display:none}
+  .hint.show{display:block}
+  .notice{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:20px}
+  .notice b{color:var(--text)}
+  .loading{color:var(--muted);font-size:14px;padding:30px 0;text-align:center}
+  .mclink{font-size:12px;font-weight:700;padding:7px 12px;border:1px solid var(--line);border-radius:99px;color:var(--text);text-decoration:none}
+  .more[hidden]{display:none!important}
+  .more{display:block;width:100%;padding:14px;border-radius:14px;background:var(--panel);font-weight:600;font-size:14px;margin-top:10px}
+  @media (max-width:500px){.full{padding-bottom:16px}}
+
+  /* --- Live --- */
+  .live{display:none;border-radius:20px;padding:16px;margin-bottom:18px;background:linear-gradient(120deg,#e0123f,#ff3d7f);text-decoration:none;color:#fff;align-items:center;gap:14px;box-shadow:0 10px 30px rgba(255,61,127,.35)}
+  .live.show{display:flex}
+  .live .dot{width:12px;height:12px;border-radius:50%;background:#fff;flex-shrink:0;animation:pulse 1.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,255,255,.7)}70%{box-shadow:0 0 0 12px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}
+  .live .meta{flex:1;min-width:0}
+  .live small{display:block;font-size:11px;font-weight:800;letter-spacing:2px}
+  .live b{display:block;font-size:17px;margin:2px 0 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .live i{font-style:normal;font-size:12px;opacity:.9}
+  .live .go{background:#fff;color:#c4103a;font-weight:800;font-size:13px;padding:9px 14px;border-radius:99px;flex-shrink:0}
+  .up{display:flex;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:12px;margin-bottom:10px}
+  .up .when{width:58px;height:58px;border-radius:14px;background:var(--panel2);display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
+  .up .when b{font-family:'Archivo Black',sans-serif;font-size:20px;line-height:1}
+  .up .when span{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--accent);text-transform:uppercase;margin-top:3px}
+  .up .meta{flex:1;min-width:0}
+  .up .meta b{display:block;font-size:15px;font-weight:600}
+  .up .meta i{font-style:normal;font-size:12px;color:var(--muted)}
+  .up .cd{font-size:11px;font-weight:700;color:var(--accent2);margin-top:3px;display:block}
+  .tab .ldot{position:absolute;top:8px;left:calc(50% + 8px);width:8px;height:8px;border-radius:50%;background:var(--accent);display:none}
+  .tab.haslive .ldot{display:block}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="notch"></div>
+  <div class="status"><span id="clock">9:41</span><span>●●● ▮</span></div>
+
+  <main class="screen" id="screen">
+    <!-- HOME -->
+    <section class="view active" id="v-home">
+      <div class="top">
+        <div><img class="brandlogo" src="logo.png" alt="Ngage Radio"></div>
+        <div class="badge">ON DEMAND</div>
+      </div>
+      <div id="notice"></div>
+      <a class="live" id="liveBanner" href="#" target="_blank" rel="noopener">
+        <div class="dot"></div>
+        <div class="meta"><small>LIVE NOW</small><b id="liveTitle">Live show</b><i id="liveSub">On Mixcloud Live</i></div>
+        <span class="go">Listen live</span>
+      </a>
+      <div class="hero" id="hero">
+        <small>Featured show</small>
+        <h2 id="heroTitle">Loading…</h2>
+        <p id="heroSub">&nbsp;</p>
+        <button class="btn" id="heroPlay"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play now</button>
+      </div>
+      <div id="upWrap" hidden>
+        <h3>Upcoming live shows</h3>
+        <div id="upList" style="margin-bottom:26px"></div>
+      </div>
+      <h3>Recently added <a data-go="shows">See all</a></h3>
+      <div class="shelf" id="shelfRecent"><div class="loading">Loading shows…</div></div>
+      <h3>Most played</h3>
+      <div class="shelf" id="shelfFav"></div>
+    </section>
+
+    <!-- SHOWS -->
+    <section class="view" id="v-shows">
+      <div class="top"><div class="logo">Shows</div></div>
+      <div class="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" placeholder="Search shows, presenters…" autocomplete="off">
+      </div>
+      <div class="chips" id="chips"></div>
+      <div id="list"></div>
+      <button class="more" id="more" hidden>Load more shows</button>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="view about" id="v-about">
+      <div class="top"><div class="logo">About</div></div>
+      <div class="hero" style="margin-bottom:20px">
+        <small>Est. on air</small>
+        <h2>Ngage Radio</h2>
+        <p style="margin:0">The shows, the presenters, the moments — kept here to replay any time.</p>
+      </div>
+      <p>Ngage Radio is an internet radio station from the UK, bringing great presenters, music and banter to listeners online.</p>
+      <p>This app is home to the show archive, so you can catch up any time &mdash; and it&rsquo;s where you&rsquo;ll find out when we&rsquo;re next live.</p>
+      <div class="stat">
+        <div><b id="statShows">0</b><span>Shows in the archive</span></div>
+        <div><b id="statPres">0</b><span>Presenters</span></div>
+      </div>
+      <p style="font-size:13px">Shows are streamed via Mixcloud, which pays royalties to the artists played.</p>
+    </section>
+  </main>
+
+  <!-- Mini player (opens the full player) -->
+  <div class="mini" id="mini">
+    <div class="art" id="miniArt"></div>
+    <div class="meta"><b id="miniTitle">—</b><i id="miniSub">—</i></div>
+    <button class="pp" id="miniPP" aria-label="Play or pause"></button>
+    <div class="bar" id="miniBar"></div>
+  </div>
+
+  <div class="hint" id="hint">Tap ▶ on the Mixcloud bar below to start listening</div>
+
+  <!-- Mixcloud's own player stays visible here (required by Mixcloud) -->
+  <div class="mcdock" id="mcdock"></div>
+
+  <!-- Tab bar -->
+  <nav class="tabs">
+    <button class="tab on" data-go="home" style="position:relative"><span class="ldot"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>Home</button>
+    <button class="tab" data-go="shows"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Shows</button>
+    <button class="tab" data-go="about"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12a8 8 0 0 1 16 0"/><path d="M7 12a5 5 0 0 1 10 0"/><circle cx="12" cy="13" r="1.5" fill="currentColor"/><path d="M12 15v6"/></svg>About</button>
+  </nav>
+
+  <!-- Full player -->
+  <div class="full" id="full">
+    <div class="head">
+      <button id="closeFull" aria-label="Close player"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      <span>Now playing</span>
+      <span style="width:28px"></span>
+    </div>
+    <div class="big"><div class="art" id="fullArt"><span id="fullArtText"></span></div></div>
+    <h2 id="fullTitle">—</h2>
+    <div class="sub" id="fullSub">—</div>
+    <input type="range" class="seek" id="seek" min="0" max="1000" value="0" aria-label="Seek">
+    <div class="times"><span id="tCur">0:00</span><span id="tDur">0:00</span></div>
+    <div class="ctrls">
+      <a class="mclink" id="mcLink" href="#" target="_blank" rel="noopener">Mixcloud</a>
+      <button id="back" aria-label="Back 15 seconds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>
+      <button class="play" id="play" aria-label="Play or pause"></button>
+      <button id="fwd" aria-label="Forward 30 seconds"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+      <button id="next" aria-label="Next show"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6v12l8.5-6zM16 6h2v12h-2z"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://widget.mixcloud.com/media/js/widgetApi.js"></script>
+<script>
+/* ================= SETTINGS ================= */
+const MIXCLOUD_USER = "NgageRadio";   // ← your Mixcloud username (from mixcloud.com/USERNAME/)
+const FEATURED_KEY  = "";             // optional: a show's key e.g. "/NgageRadio/breakfast-takeover/" — blank = newest show
+const PAGE_SIZE     = 30;
+
+/* ---- LIVE SHOWS ----
+   The "LIVE NOW" banner switches on by itself while a show below is on air
+   (from its start time for its length in minutes). Times are UK time.
+   To go live outside the schedule, set LIVE_NOW to true. */
+const LIVE_URL   = "https://www.mixcloud.com/live/" + MIXCLOUD_USER + "/";
+const LIVE_NOW   = false;            // manual override
+const LIVE_TITLE = "Ngage Radio Live"; // used for the manual override
+const UPCOMING = [
+  // Add live shows here, e.g.
+  // { title:"The Country Show Live", presenter:"Ash Watkin", start:"2026-12-05 19:00", minutes:120 },
+];
+/* ============================================ */
+
+const PALETTES=[["#ff0000","#ff00cc"],["#ff0066","#8a00e6"],["#ff2a00","#ff0080"],["#ff00aa","#5a10c8"],["#ff1a5e","#a8004f"],["#e0004a","#ff2bd6"]];
+const $=id=>document.getElementById(id);
+const ICON_PLAY='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const ICON_PAUSE='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=t=>{if(!isFinite(t)||t<0)return"0:00";t=Math.floor(t);const h=Math.floor(t/3600),m=Math.floor(t%3600/60),s=String(t%60).padStart(2,"0");return h?`${h}:${String(m).padStart(2,"0")}:${s}`:`${m}:${s}`};
+
+let shows=[],nextUrl=null,current=null,filter="All";
+let widget=null,paused=true,pos=0,dur=0,seeking=false,hintTimer=null;
+
+/* ---------- Load shows from Mixcloud ---------- */
+function parseTitle(name){
+  // Ngage titles look like: "Ash Watkin, The Country Show 22/2/26 Hr1"
+  let presenter="",show=name,date=null,part="";
+  const m=name.match(/^([^,]+),\s*(.+)$/);
+  if(m){presenter=m[1].trim();show=m[2]}
+  const hr=show.match(/\s*\bHr\s*(\d+)\s*$/i);
+  if(hr){part="Hr "+hr[1];show=show.slice(0,hr.index)}
+  const dt=show.match(/\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s*$/);
+  if(dt){let y=+dt[3];if(y<100)y+=2000;date=new Date(y,+dt[2]-1,+dt[1]);show=show.slice(0,dt.index)}
+  return {presenter,show:show.trim()||name,date,part};
+}
+function toShow(c,i){
+  const p=c.pictures||{};
+  const t=parseTitle(c.name||"Untitled show");
+  const d=t.date||(c.created_time?new Date(c.created_time):null);
+  const tag=c.tags&&c.tags[0]&&c.tags[0].name;
+  return {
+    id:c.key, key:c.key, url:c.url,
+    title:t.show+(t.part?" · "+t.part:""),
+    presenter:t.presenter||(c.user&&c.user.name)||"Ngage Radio",
+    date:d?d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"",
+    genre:t.presenter?t.show:(tag||"Shows"),
+    plays:c.play_count||0, length:c.audio_length||0,
+    img:p["640wx640h"]||p.extra_large||p.large||p.medium||"",
+    thumb:p["320wx320h"]||p.medium||p.large||"",
+    pal:PALETTES[(shows.length+i)%PALETTES.length]
+  };
+}
+async function loadPage(url){
+  const r=await fetch(url);
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  const j=await r.json();
+  shows=shows.concat((j.data||[]).map(toShow));
+  nextUrl=j.paging&&j.paging.next||null;
+  $("more").hidden=!nextUrl;
+  render();
+}
+async function init(){
+  try{
+    await loadPage(`https://api.mixcloud.com/${encodeURIComponent(MIXCLOUD_USER)}/cloudcasts/?limit=${PAGE_SIZE}&offset=0`);
+    if(!shows.length)throw new Error("No shows");
+  }catch(e){
+    $("notice").innerHTML=`<div class="notice"><b>No shows loaded yet.</b><br>Check the Mixcloud username in the settings at the bottom of this file (currently “${esc(MIXCLOUD_USER)}”) and that the account has public uploads.</div>`;
+    $("heroTitle").textContent="Coming soon";$("shelfRecent").innerHTML="";
+  }
+}
+$("more").onclick=async()=>{if(!nextUrl)return;$("more").textContent="Loading…";try{await loadPage(nextUrl)}finally{$("more").textContent="Load more shows"}};
+
+/* ---------- Render ---------- */
+const artAttr=(s,big)=>{const im=big?s.img:s.thumb;return im?`class="art img" style="background:url('${encodeURI(im)}') center/cover"`:`class="art" style="${phBg(s)}"`};
+const phBg=s=>`background:url(mark-white.png) right 10% top 12%/42% no-repeat,linear-gradient(140deg,${s.pal[0]},${s.pal[1]})`;
+const card=s=>`<button class="card" data-id="${esc(s.id)}"><div ${artAttr(s)}><span>${esc(s.title)}</span></div><b>${esc(s.title)}</b><i>${esc(s.presenter)}</i></button>`;
+const row=s=>`<button class="row${current&&current.id===s.id?" playing":""}" data-id="${esc(s.id)}"><div ${artAttr(s)}></div><div class="meta"><b>${esc(s.title)}</b><i>${esc(s.presenter)} · ${esc(s.date)}</i></div><span class="dur">${s.length?fmt(s.length):""}</span></button>`;
+function render(){
+  if(!shows.length)return;
+  const feat=shows.find(s=>s.key===FEATURED_KEY)||shows[0];
+  $("heroTitle").textContent=feat.title;
+  $("heroSub").textContent=[feat.presenter,feat.date].filter(Boolean).join(" · ");
+  if(feat.img){$("hero").style.background=`linear-gradient(180deg,rgba(13,11,20,.15),rgba(13,11,20,.85)),url('${encodeURI(feat.img)}') center/cover`}
+  $("heroPlay").onclick=()=>play(feat);
+  $("shelfRecent").innerHTML=shows.slice(0,8).map(card).join("");
+  $("shelfFav").innerHTML=[...shows].sort((a,b)=>b.plays-a.plays).slice(0,8).map(card).join("");
+  const genres=["All",...new Set(shows.map(s=>s.genre))];
+  $("chips").innerHTML=genres.length>2?genres.map(g=>`<button class="chip${g===filter?" on":""}" data-g="${esc(g)}">${esc(g)}</button>`).join(""):"";
+  const q=$("q").value.trim().toLowerCase();
+  const list=shows.filter(s=>(filter==="All"||s.genre===filter)&&(!q||(s.title+" "+s.presenter+" "+s.genre).toLowerCase().includes(q)));
+  $("list").innerHTML=list.length?list.map(row).join(""):`<p style="color:var(--muted);padding:20px 4px">No shows match that.</p>`;
+  $("statShows").textContent=shows.length+(nextUrl?"+":"");
+  $("statPres").textContent=new Set(shows.map(s=>s.presenter)).size;
+}
+
+/* ---------- Mixcloud player ---------- */
+function widgetSrc(key){
+  return "https://player-widget.mixcloud.com/widget/iframe/?hide_cover=1&mini=1&light=0&hide_artwork=1&autoplay=1&feed="+encodeURIComponent(key);
+}
+function play(s){
+  current=s;pos=0;dur=s.length||0;showNowPlaying(s);render();
+  $("mcdock").classList.add("show");$("mini").classList.add("show");
+  if(!widget){
+    const f=document.createElement("iframe");
+    f.allow="autoplay; encrypted-media";f.title="Mixcloud player";f.src=widgetSrc(s.key);
+    $("mcdock").appendChild(f);
+    widget=Mixcloud.PlayerWidget(f);
+    widget.ready.then(()=>{
+      widget.events.play.on(()=>{paused=false;syncPP();hideHint()});
+      widget.events.pause.on(()=>{paused=true;syncPP()});
+      widget.events.ended.on(()=>$("next").click());
+      widget.events.progress.on((p,d)=>{pos=p;if(d)dur=d;updateProgress()});
+      widget.play().catch(()=>{});
+    });
+  }else{
+    widget.ready.then(()=>widget.load(s.key,true)).catch(()=>{});
+  }
+  clearTimeout(hintTimer);
+  hintTimer=setTimeout(()=>{if(paused)$("hint").classList.add("show")},2500);
+}
+function hideHint(){clearTimeout(hintTimer);$("hint").classList.remove("show")}
+function showNowPlaying(s){
+  const style=s.img?`background:url('${encodeURI(s.img)}') center/cover`:phBg(s);
+  $("miniArt").setAttribute("style",style);$("fullArt").setAttribute("style",style);
+  $("fullArt").classList.toggle("img",!!s.img);
+  $("fullArtText").textContent=s.title;
+  $("full").style.setProperty("--c1",s.pal[1]);
+  $("miniTitle").textContent=$("fullTitle").textContent=s.title;
+  $("miniSub").textContent=s.presenter;
+  $("fullSub").textContent=[s.presenter,s.date].filter(Boolean).join(" · ");
+  $("mcLink").href=s.url||"https://www.mixcloud.com/";
+  $("tDur").textContent=fmt(dur);updateProgress();
+}
+function updateProgress(){
+  const p=dur?pos/dur*100:0;
+  $("miniBar").style.width=p+"%";
+  if(!seeking){$("seek").value=p*10;$("seek").style.setProperty("--p",p+"%");$("tCur").textContent=fmt(pos)}
+  $("tDur").textContent=fmt(dur);
+}
+function syncPP(){const i=paused?ICON_PLAY:ICON_PAUSE;$("miniPP").innerHTML=i;$("play").innerHTML=i}
+function toggle(){
+  if(!current){if(shows[0])play(shows[0]);return}
+  if(widget)widget.ready.then(()=>widget.togglePlay()).catch(()=>{});
+}
+
+
+/* ---------- Live banner + upcoming ---------- */
+function ukDate(str){
+  // treat "YYYY-MM-DD HH:MM" as UK local time (handles GMT/BST)
+  const [d,t]=str.trim().split(/[ T]/);const [Y,M,D]=d.split("-").map(Number);const [h,m]=(t||"00:00").split(":").map(Number);
+  const guess=Date.UTC(Y,M-1,D,h,m);
+  const off=new Date(guess).toLocaleString("en-GB",{timeZone:"Europe/London",timeZoneName:"short"}).includes("BST")?60:0;
+  return new Date(guess-off*60000);
+}
+function renderLive(){
+  const now=Date.now();
+  const sched=UPCOMING.map(s=>{const st=ukDate(s.start);return{...s,st,en:new Date(st.getTime()+(s.minutes||60)*60000)}}).sort((a,b)=>a.st-b.st);
+  const onAir=sched.find(s=>now>=s.st&&now<s.en);
+  const banner=$("liveBanner");
+  if(onAir||LIVE_NOW){
+    banner.href=LIVE_URL;banner.classList.add("show");
+    $("liveTitle").textContent=onAir?onAir.title:LIVE_TITLE;
+    $("liveSub").textContent=onAir?`${onAir.presenter} · until ${onAir.en.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit",timeZone:"Europe/London"})}`:"On Mixcloud Live";
+  }else banner.classList.remove("show");
+  document.querySelector('.tab[data-go="home"]').classList.toggle("haslive",!!(onAir||LIVE_NOW));
+  const next=sched.filter(s=>s.en>now&&s!==onAir);
+  $("upWrap").hidden=!next.length;
+  $("upList").innerHTML=next.slice(0,4).map(s=>{
+    const o={timeZone:"Europe/London"};
+    const day=s.st.toLocaleDateString("en-GB",{...o,day:"numeric"}),mon=s.st.toLocaleDateString("en-GB",{...o,month:"short"});
+    const when=s.st.toLocaleDateString("en-GB",{...o,weekday:"short"})+" "+s.st.toLocaleTimeString("en-GB",{...o,hour:"2-digit",minute:"2-digit"});
+    const ms=s.st-now,dd=Math.floor(ms/864e5),hh=Math.floor(ms%864e5/36e5),mm=Math.floor(ms%36e5/6e4);
+    const cd=dd>0?`Starts in ${dd} day${dd>1?"s":""}${hh?`, ${hh} hr`:""}`:hh>0?`Starts in ${hh} hr ${mm} min`:`Starts in ${mm} min`;
+    return `<div class="up"><div class="when"><b>${esc(day)}</b><span>${esc(mon)}</span></div><div class="meta"><b>${esc(s.title)}</b><i>${esc(s.presenter)} · ${esc(when)}</i><span class="cd">${cd}</span></div></div>`;
+  }).join("");
+}
+
+/* ---------- UI wiring ---------- */
+document.addEventListener("click",e=>{
+  const c=e.target.closest("[data-id]");if(c){const s=shows.find(x=>x.id===c.dataset.id);if(s)play(s);return}
+  const g=e.target.closest("[data-go]");if(g){go(g.dataset.go);return}
+  const ch=e.target.closest("[data-g]");if(ch){filter=ch.dataset.g;render()}
+});
+function go(v){
+  document.querySelectorAll(".view").forEach(x=>x.classList.toggle("active",x.id==="v-"+v));
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.dataset.go===v));
+  $("full").classList.remove("open");$("screen").scrollTop=0;
+}
+$("q").oninput=render;
+$("mini").onclick=e=>{if(e.target.closest("#miniPP"))return;$("full").classList.add("open")};
+$("miniPP").onclick=toggle;$("play").onclick=toggle;
+$("closeFull").onclick=()=>$("full").classList.remove("open");
+$("back").onclick=()=>widget&&widget.seek(Math.max(0,pos-15));
+$("fwd").onclick=()=>widget&&widget.seek(Math.min(dur||pos+30,pos+30));
+$("next").onclick=()=>{if(!current)return;const i=shows.indexOf(current);play(shows[(i+1)%shows.length])};
+$("seek").oninput=e=>{seeking=true;const p=e.target.value/10;e.target.style.setProperty("--p",p+"%");$("tCur").textContent=fmt(dur*p/100)};
+$("seek").onchange=e=>{const t=dur*e.target.value/1000;seeking=false;if(widget)widget.seek(t)};
+
+const tick=()=>{const d=new Date();$("clock").textContent=d.getHours()+":"+String(d.getMinutes()).padStart(2,"0")};
+tick();setInterval(tick,30000);
+syncPP();init();renderLive();setInterval(renderLive,30000);
+</script>
+</body>
+</html>
